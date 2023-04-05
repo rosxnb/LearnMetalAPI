@@ -73,7 +73,7 @@ void AppDelegate::applicationDidFinishLaunching( NS::Notification* pNotification
 
     _pView = MTK::View::alloc()->init(frame, _pDevice);
     _pView->setColorPixelFormat(MTL::PixelFormat::PixelFormatBGRA8Unorm_sRGB);
-    _pView->setClearColor(MTL::ClearColor::Make(0.3, 0.2, 0.1, 1.0));
+    _pView->setClearColor(MTL::ClearColor::Make(0.1, 0., 0.1, 1.0));
     _pView->setDelegate( _pViewDelegate );
 
     _pWindow = NS::Window::alloc()->init(
