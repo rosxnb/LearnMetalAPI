@@ -16,6 +16,8 @@ class Renderer
         MTL::Device* _pDevice;
         MTL::CommandQueue* _pCmdQ;
         MTL::RenderPipelineState* _pPipeline;
+        MTL::Library* _pLibrary;
+        MTL::Buffer* _pArgBuf;
         MTL::Buffer* _pPositions;
         MTL::Buffer* _pColors;
 };

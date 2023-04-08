@@ -10,6 +10,8 @@ Renderer::Renderer(MTL::Device* pDevice)
 
 Renderer::~Renderer()
 {
+    _pLibrary->release();
+    _pArgBuf->release();
     _pPositions->release();
     _pColors->release();
     _pPipeline->release();
@@ -31,13 +33,18 @@ void Renderer::buildShaders()
             half3 color;
         };
 
-        v2f vertex vertexMain( uint vertexId [[vertex_id]],
-                               device const float3* positions [[buffer(0)]],
-                               device const float3* colors [[buffer(1)]] )
+        struct VertexData
+        {
+            device float3* positions [[id(0)]];
+            device float3* colors [[id(1)]];
+        };
+
+        v2f vertex vertexMain( device const VertexData* args [[buffer(0)]],
+                               uint vertexId [[vertex_id]] )
         {
             v2f o;
-            o.position = float4( positions[vertexId], 1.0);
-            o.color = half3( colors[vertexId]);
+            o.position = float4( args->positions[vertexId], 1.0);
+            o.color = half3( args->colors[vertexId]);
             return o;
         }
 
@@ -49,6 +56,7 @@ void Renderer::buildShaders()
 
     NS::Error* pError = nullptr;
     MTL::Library* pLibrary = _pDevice->newLibrary( NS::String::string(shaderSrc, UTF8StringEncoding), nullptr, &pError);
+    _pLibrary = pLibrary;
 
     if (!pLibrary)
     {
@@ -74,7 +82,6 @@ void Renderer::buildShaders()
     pVertexFn->release();
     pFragFn->release();
     pDesc->release();
-    pLibrary->release();
 }
 
 void Renderer::buildBuffers()
@@ -98,17 +105,28 @@ void Renderer::buildBuffers()
     const size_t positionsDataSize = N * sizeof(simd::float3);
     const size_t colorsDataSize = N * sizeof(simd::float3);
 
-    MTL::Buffer* pPositions = _pDevice->newBuffer( positionsDataSize, MTL::ResourceStorageModeManaged );
-    MTL::Buffer* pColors = _pDevice->newBuffer( colorsDataSize, MTL::ResourceStorageModeManaged );
-
-    _pPositions = pPositions;
-    _pColors = pColors;
+    _pPositions = _pDevice->newBuffer( positionsDataSize, MTL::ResourceStorageModeManaged );
+    _pColors    = _pDevice->newBuffer( colorsDataSize, MTL::ResourceStorageModeManaged );
 
     memcpy(_pPositions->contents(), positions, positionsDataSize);
     memcpy(_pColors->contents(), colors, colorsDataSize);
 
     _pPositions->didModifyRange( NS::Range::Make(0, _pPositions->length()) );
     _pColors->didModifyRange( NS::Range::Make(0, _pColors->length()) );
+
+    assert( _pLibrary );
+    MTL::Function* pVertexFn = _pLibrary->newFunction( NS::String::string("vertexMain", NS::StringEncoding::UTF8StringEncoding) );
+    MTL::ArgumentEncoder* pArgEncoder = pVertexFn->newArgumentEncoder( 0 );
+
+    _pArgBuf= _pDevice->newBuffer( pArgEncoder->encodedLength(), MTL::ResourceStorageModeManaged);
+    pArgEncoder->setArgumentBuffer( _pArgBuf, 0 );
+    pArgEncoder->setBuffer( _pPositions, 0, 0);
+    pArgEncoder->setBuffer( _pColors, 0, 1);
+
+    _pArgBuf->didModifyRange( NS::Range::Make(0, _pArgBuf->length()) );
+
+    pVertexFn->release();
+    pArgEncoder->release();
 }
 
 void Renderer::draw(MTK::View* pView)
@@ -120,8 +138,9 @@ void Renderer::draw(MTK::View* pView)
     MTL::RenderCommandEncoder* pEncoder = pCmdBuff->renderCommandEncoder(pDesciptor);
 
     pEncoder->setRenderPipelineState( _pPipeline );
-    pEncoder->setVertexBuffer( _pPositions, 0, 0 );
-    pEncoder->setVertexBuffer( _pColors, 0, 1 );
+    pEncoder->setVertexBuffer( _pArgBuf, 0, 0 );
+    pEncoder->useResource( _pPositions, MTL::ResourceUsageRead );
+    pEncoder->useResource( _pColors, MTL::ResourceUsageRead );
     pEncoder->drawPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle, NS::UInteger(0), NS::UInteger(3) );
 
     pEncoder->endEncoding();
