@@ -2,10 +2,15 @@
 
 Renderer::Renderer(MTL::Device* pDevice)
     : _pDevice(pDevice)
-    , _pCmdQ(_pDevice->newCommandQueue())
+    , _angle( 0.f )
+    , _frame( 0 )
 {
+    _pCmdQ     = _pDevice->newCommandQueue();
+    _semaphore = dispatch_semaphore_create( Renderer::kMaxFramesInFlight );
+    
     buildShaders();
     buildBuffers();
+    buildFrameData();
 }
 
 Renderer::~Renderer()
@@ -14,6 +19,10 @@ Renderer::~Renderer()
     _pArgBuf->release();
     _pPositions->release();
     _pColors->release();
+
+    for (int i = 0; i < Renderer::kMaxFramesInFlight; ++i)
+        _pFrameData[i]->release();
+
     _pPipeline->release();
     _pCmdQ->release();
     _pDevice->release();
@@ -39,12 +48,23 @@ void Renderer::buildShaders()
             device float3* colors [[id(1)]];
         };
 
-        v2f vertex vertexMain( device const VertexData* args [[buffer(0)]],
+        struct FrameData 
+        {
+            float angle;
+        };
+
+        v2f vertex vertexMain( device const VertexData* vertexData [[buffer(0)]],
+                               constant FrameData* frameData [[buffer(1)]],
                                uint vertexId [[vertex_id]] )
         {
+            float angle = frameData->angle;
+            float3x3 rotMat = float3x3( sin(angle),  cos(angle), 0.f,
+                                        cos(angle), -sin(angle), 0.f,
+                                        0.f,     0.f,    1.f );
+
             v2f o;
-            o.position = float4( args->positions[vertexId], 1.0);
-            o.color = half3( args->colors[vertexId]);
+            o.position = float4( rotMat * vertexData->positions[vertexId], 1.0);
+            o.color = half3( vertexData->colors[vertexId]);
             return o;
         }
 
@@ -129,18 +149,43 @@ void Renderer::buildBuffers()
     pArgEncoder->release();
 }
 
+struct FrameData
+{
+    float angle;
+};
+
+void Renderer::buildFrameData()
+{
+    for (int i = 0; i < Renderer::kMaxFramesInFlight; ++i)
+        _pFrameData[i] = _pDevice->newBuffer( sizeof(FrameData), MTL::ResourceStorageModeManaged );
+}
+
 void Renderer::draw(MTK::View* pView)
 {
     NS::AutoreleasePool* pPool = NS::AutoreleasePool::alloc()->init();
 
+    _frame = (_frame + 1) % Renderer::kMaxFramesInFlight;
+    MTL::Buffer* pFrameDataBuffer = _pFrameData[_frame];
+
     MTL::CommandBuffer* pCmdBuff = _pCmdQ->commandBuffer();
+
+    dispatch_semaphore_wait( _semaphore, DISPATCH_TIME_FOREVER );
+    pCmdBuff->addCompletedHandler( [this](MTL::CommandBuffer* pBuff) {
+        dispatch_semaphore_signal(this->_semaphore);
+    });
+
+    reinterpret_cast< FrameData* >(pFrameDataBuffer->contents())->angle = (_angle += 0.01f);
+    pFrameDataBuffer->didModifyRange( NS::Range::Make(0, sizeof(FrameData)) );
+
     MTL::RenderPassDescriptor* pDesciptor = pView->currentRenderPassDescriptor();
     MTL::RenderCommandEncoder* pEncoder = pCmdBuff->renderCommandEncoder(pDesciptor);
-
     pEncoder->setRenderPipelineState( _pPipeline );
+
     pEncoder->setVertexBuffer( _pArgBuf, 0, 0 );
     pEncoder->useResource( _pPositions, MTL::ResourceUsageRead );
     pEncoder->useResource( _pColors, MTL::ResourceUsageRead );
+
+    pEncoder->setVertexBuffer( pFrameDataBuffer, 0, 1 );
     pEncoder->drawPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle, NS::UInteger(0), NS::UInteger(3) );
 
     pEncoder->endEncoding();

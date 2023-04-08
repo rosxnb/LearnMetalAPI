@@ -18,9 +18,9 @@ NS::Menu* AppDelegate::createMenuBar()
         NS::String* pAppName = NS::RunningApplication::currentApplication()->localizedName();
         NS::String* pQuitName = NS::String::string("Quit ", UTF8StringEncoding)->stringByAppendingString(pAppName);
         SEL quitCb = NS::MenuItem::registerActionCallback("quitapp:", [](void *, SEL, const NS::Object* pSender){
-                    auto pApp = NS::Application::sharedApplication();
-                    pApp->terminate( pSender );
-                });
+            auto pApp = NS::Application::sharedApplication();
+            pApp->terminate( pSender );
+        });
 
         NS::MenuItem* pQuitItem = pAppMenu->addItem(pQuitName, quitCb, NS::String::string("q", UTF8StringEncoding));
         pQuitItem->setKeyEquivalentModifierMask( NS::EventModifierFlagCommand );
@@ -32,9 +32,9 @@ NS::Menu* AppDelegate::createMenuBar()
     {
         NS::String* pCloseName = NS::String::string("Close Window", UTF8StringEncoding);
         SEL closeCb = NS::MenuItem::registerActionCallback("closewindow:", [](void *, SEL, const NS::Object* pSender){
-                    auto pApp = NS::Application::sharedApplication();
-                    pApp->windows()->object< NS::Window >(0)->close();
-                });
+            auto pApp = NS::Application::sharedApplication();
+            pApp->windows()->object< NS::Window >(0)->close();
+        });
 
         NS::MenuItem* pCloseItem = pWindowMenu->addItem(pCloseName, closeCb, NS::String::string("w", UTF8StringEncoding));
         pCloseItem->setKeyEquivalentModifierMask( NS::EventModifierFlagCommand );

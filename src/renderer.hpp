@@ -10,6 +10,7 @@ class Renderer
 
         void buildShaders();
         void buildBuffers();
+        void buildFrameData();
         void draw(MTK::View* pView);
 
     private:
@@ -20,4 +21,11 @@ class Renderer
         MTL::Buffer* _pArgBuf;
         MTL::Buffer* _pPositions;
         MTL::Buffer* _pColors;
+        MTL::Buffer* _pFrameData[3];
+
+        float _angle;
+        int _frame;
+        dispatch_semaphore_t _semaphore;
+        
+        static const int kMaxFramesInFlight = 3;
 };
