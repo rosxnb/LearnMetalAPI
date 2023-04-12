@@ -1,195 +1,194 @@
 #include "renderer.hpp"
+#include <simd/simd.h>
+#include <fstream>
+#include <sstream>
+#include <memory>
 
-Renderer::Renderer(MTL::Device* pDevice)
-    : _pDevice(pDevice)
+Renderer::Renderer( MTL::Device* pDevice )
+    : _pDevice( pDevice->retain() )
+    , _pCmdQ( _pDevice->newCommandQueue() )
     , _angle( 0.f )
     , _frame( 0 )
-{
-    _pCmdQ     = _pDevice->newCommandQueue();
-    _semaphore = dispatch_semaphore_create( Renderer::kMaxFramesInFlight );
-    
-    buildShaders();
-    buildBuffers();
-    buildFrameData();
+    , _semaphore( dispatch_semaphore_create( kMaxFrames ) )
+{ 
+    build_shaders();
+    build_buffers();
 }
 
 Renderer::~Renderer()
 {
-    _pLibrary->release();
-    _pArgBuf->release();
-    _pPositions->release();
-    _pColors->release();
+    delete _pShaderSrc; 
 
-    for (int i = 0; i < Renderer::kMaxFramesInFlight; ++i)
-        _pFrameData[i]->release();
-
-    _pPipeline->release();
+    for ( int i = 0; i < kMaxFrames; ++i )
+        _pInstanceData[i]->release();
+    
+    _pIndexData->release();
+    _pVertexData->release();
+    _pLib->release();
+    _pRps->release();
     _pCmdQ->release();
     _pDevice->release();
 }
 
-void Renderer::buildShaders()
+std::string* Renderer::read_source(const char* filepath) const
+{
+    std::string* buffer = new std::string;
+
+    std::ifstream fileHandler;
+    fileHandler.exceptions( std::ifstream::badbit | std::ifstream::failbit );
+
+    try 
+    {
+        fileHandler.open(filepath);
+        std::stringstream sstream;
+        sstream << fileHandler.rdbuf();
+        buffer->assign( sstream.str() );
+    }
+    catch (std::ifstream::failure err)
+    {
+        __builtin_printf("Failed to load file: %s \n", filepath);
+        __builtin_printf("%s \n\n", err.what());
+    }
+
+    return buffer;
+}
+
+void Renderer::build_shaders()
 {
     using NS::StringEncoding::UTF8StringEncoding;
 
-    const char* shaderSrc = R"(
-        #include <metal_stdlib>
-        using namespace metal;
-
-        struct v2f
-        {
-            float4 position [[position]];
-            half3 color;
-        };
-
-        struct VertexData
-        {
-            device float3* positions [[id(0)]];
-            device float3* colors [[id(1)]];
-        };
-
-        struct FrameData 
-        {
-            float angle;
-        };
-
-        v2f vertex vertexMain( device const VertexData* vertexData [[buffer(0)]],
-                               constant FrameData* frameData [[buffer(1)]],
-                               uint vertexId [[vertex_id]] )
-        {
-            float angle = frameData->angle;
-            float3x3 rotMat = float3x3( sin(angle),  cos(angle), 0.f,
-                                        cos(angle), -sin(angle), 0.f,
-                                        0.f,     0.f,    1.f );
-
-            v2f o;
-            o.position = float4( rotMat * vertexData->positions[vertexId], 1.0);
-            o.color = half3( vertexData->colors[vertexId]);
-            return o;
-        }
-
-        half4 fragment fragmentMain( v2f in [[stage_in]] )
-        {
-            return half4( in.color, 1.0 );
-        }
-    )";
-
-    NS::Error* pError = nullptr;
-    MTL::Library* pLibrary = _pDevice->newLibrary( NS::String::string(shaderSrc, UTF8StringEncoding), nullptr, &pError);
-    _pLibrary = pLibrary;
-
-    if (!pLibrary)
+    NS::Error* pError {nullptr};
+    const char* shaderSrc = read_source("shader/program.metal")->data();
+    _pLib = _pDevice->newLibrary( NS::String::string(shaderSrc, UTF8StringEncoding), nullptr, &pError );
+    if ( !_pLib )
     {
-        __builtin_printf("Metal Library assignment failes: \n%s", pError->localizedDescription()->utf8String());
-        assert(false);
+        __builtin_printf("Library creation from shader source failed. \n");
+        __builtin_printf("%s \n\n", pError->localizedDescription()->utf8String());
+        assert( false );
     }
 
-    MTL::Function* pVertexFn = pLibrary->newFunction( NS::String::string("vertexMain", UTF8StringEncoding) );
-    MTL::Function* pFragFn = pLibrary->newFunction( NS::String::string("fragmentMain", UTF8StringEncoding) );
+    MTL::Function* fnVertex     = _pLib->newFunction( NS::String::string("main_vertex", UTF8StringEncoding) );
+    MTL::Function* fnFragment   = _pLib->newFunction( NS::String::string("main_fragment", UTF8StringEncoding) );
+    MTL::RenderPipelineDescriptor* pRpd = MTL::RenderPipelineDescriptor::alloc()->init();
 
-    MTL::RenderPipelineDescriptor *pDesc = MTL::RenderPipelineDescriptor::alloc()->init();
-    pDesc->setVertexFunction( pVertexFn );
-    pDesc->setFragmentFunction( pFragFn );
-    pDesc->colorAttachments()->object(0)->setPixelFormat( MTL::PixelFormat::PixelFormatBGRA8Unorm_sRGB );
+    pRpd->setVertexFunction( fnVertex );
+    pRpd->setFragmentFunction( fnFragment );
+    pRpd->colorAttachments()->object(0)->setPixelFormat( MTL::PixelFormat::PixelFormatBGRA8Unorm_sRGB );
 
-    _pPipeline = _pDevice->newRenderPipelineState( pDesc, &pError );
-    if (!_pPipeline)
+    _pRps = _pDevice->newRenderPipelineState( pRpd, &pError );
+    if ( !_pRps )
     {
-        __builtin_printf("RenderPipeline assignment failed: \n%s", pError->localizedDescription()->utf8String());
-        assert(false);
+        __builtin_printf("RenderPipelineState creation failed. \n");
+        __builtin_printf("%s \n\n", pError->localizedDescription()->utf8String());
+        assert( false );
     }
 
-    pVertexFn->release();
-    pFragFn->release();
-    pDesc->release();
+    fnVertex->release();
+    fnFragment->release();
+    pRpd->release();
 }
 
-void Renderer::buildBuffers()
+namespace ShaderType
 {
-    const size_t N = 3;
-
-    simd::float3 positions[N] = 
+    struct InstanceData 
     {
-        {-0.8f, -0.8f, 0.0f},
-        { 0.0f,  0.8f, 0.0f},
-        { 0.8f, -0.8f, 0.0f}
+        simd::float4x4 instanceTransform;
+        simd::float4 instanceColor;
+    };
+}
+
+void Renderer::build_buffers()
+{
+    using simd::float3;
+
+    float s = 0.5f;
+    float3 vertices[] = 
+    {
+        { -s, -s, +s },     // 3rd quadrant
+        { +s, -s, +s },     // 4th quadrant
+        { +s, +s, +s },     // 1st quadrant
+        { -s, +s, +s }      // 2nd quadrant
+    };
+    uint16_t indices[] = 
+    {
+        0, 1, 2,
+        2, 3, 0
     };
 
-    simd::float3 colors[N] = 
-    {
-        {1.0f, 0.3f, 0.2f},
-        {0.8f, 1.0f, 0.0f},
-        {0.8f, 0.0f, 1.0f}
-    };
+    constexpr size_t size_vertices = sizeof( vertices );
+    constexpr size_t size_indices = sizeof( indices );
+    _pVertexData   = _pDevice->newBuffer( size_vertices, MTL::ResourceStorageModeManaged );
+    _pIndexData    = _pDevice->newBuffer( size_indices, MTL::ResourceStorageModeManaged );
 
-    const size_t positionsDataSize = N * sizeof(simd::float3);
-    const size_t colorsDataSize = N * sizeof(simd::float3);
+    memcpy( _pVertexData->contents(), vertices, size_vertices );
+    memcpy( _pIndexData->contents(), indices, size_indices );
 
-    _pPositions = _pDevice->newBuffer( positionsDataSize, MTL::ResourceStorageModeManaged );
-    _pColors    = _pDevice->newBuffer( colorsDataSize, MTL::ResourceStorageModeManaged );
+    _pVertexData->didModifyRange( NS::Range::Make(0 , _pVertexData->length()) );
+    _pIndexData->didModifyRange( NS::Range::Make(0, _pIndexData->length()) );
 
-    memcpy(_pPositions->contents(), positions, positionsDataSize);
-    memcpy(_pColors->contents(), colors, colorsDataSize);
-
-    _pPositions->didModifyRange( NS::Range::Make(0, _pPositions->length()) );
-    _pColors->didModifyRange( NS::Range::Make(0, _pColors->length()) );
-
-    assert( _pLibrary );
-    MTL::Function* pVertexFn = _pLibrary->newFunction( NS::String::string("vertexMain", NS::StringEncoding::UTF8StringEncoding) );
-    MTL::ArgumentEncoder* pArgEncoder = pVertexFn->newArgumentEncoder( 0 );
-
-    _pArgBuf= _pDevice->newBuffer( pArgEncoder->encodedLength(), MTL::ResourceStorageModeManaged);
-    pArgEncoder->setArgumentBuffer( _pArgBuf, 0 );
-    pArgEncoder->setBuffer( _pPositions, 0, 0);
-    pArgEncoder->setBuffer( _pColors, 0, 1);
-
-    _pArgBuf->didModifyRange( NS::Range::Make(0, _pArgBuf->length()) );
-
-    pVertexFn->release();
-    pArgEncoder->release();
+    constexpr size_t size_instance = kNumInstances * sizeof( ShaderType::InstanceData );
+    for ( int i = 0; i < kMaxFrames; ++i )
+        _pInstanceData[i] = _pDevice->newBuffer( size_instance, MTL::ResourceStorageModeManaged );
 }
 
-struct FrameData
+void Renderer::draw( MTK::View* pView )
 {
-    float angle;
-};
-
-void Renderer::buildFrameData()
-{
-    for (int i = 0; i < Renderer::kMaxFramesInFlight; ++i)
-        _pFrameData[i] = _pDevice->newBuffer( sizeof(FrameData), MTL::ResourceStorageModeManaged );
-}
-
-void Renderer::draw(MTK::View* pView)
-{
+    using simd::float4x4, simd::float4;
     NS::AutoreleasePool* pPool = NS::AutoreleasePool::alloc()->init();
 
-    _frame = (_frame + 1) % Renderer::kMaxFramesInFlight;
-    MTL::Buffer* pFrameDataBuffer = _pFrameData[_frame];
+    _angle += 0.001f;
+    _frame = (_frame + 1) % kMaxFrames;
+    MTL::Buffer* pInstanceDataBuffer = _pInstanceData[ _frame ];
 
     MTL::CommandBuffer* pCmdBuff = _pCmdQ->commandBuffer();
-
     dispatch_semaphore_wait( _semaphore, DISPATCH_TIME_FOREVER );
-    pCmdBuff->addCompletedHandler( [this](MTL::CommandBuffer* pBuff) {
-        dispatch_semaphore_signal(this->_semaphore);
-    });
+    pCmdBuff->addCompletedHandler( [this]( MTL::CommandBuffer* )
+            {
+                dispatch_semaphore_signal(this->_semaphore);
+            } );
 
-    reinterpret_cast< FrameData* >(pFrameDataBuffer->contents())->angle = (_angle += 0.01f);
-    pFrameDataBuffer->didModifyRange( NS::Range::Make(0, sizeof(FrameData)) );
 
-    MTL::RenderPassDescriptor* pDesciptor = pView->currentRenderPassDescriptor();
-    MTL::RenderCommandEncoder* pEncoder = pCmdBuff->renderCommandEncoder(pDesciptor);
-    pEncoder->setRenderPipelineState( _pPipeline );
+    constexpr float scl = 0.05f;
+    ShaderType::InstanceData* pInstanceData = reinterpret_cast< ShaderType::InstanceData* >(pInstanceDataBuffer->contents());
+    for ( size_t i = 0; i < kNumInstances; ++i )
+    {
+        float iDivNumInstances  = (float) i / kNumInstances;
+        float r                 = iDivNumInstances;
+        float g                 = 1.f - r;
+        float b                 = iDivNumInstances * M_PI * 2.f;
+        float xoff              = (iDivNumInstances * 2.f - 1.f) + (1.f / kNumInstances);
+        float yoff              = sin( (iDivNumInstances + _angle) * M_PI * 2.f );
 
-    pEncoder->setVertexBuffer( _pArgBuf, 0, 0 );
-    pEncoder->useResource( _pPositions, MTL::ResourceUsageRead );
-    pEncoder->useResource( _pColors, MTL::ResourceUsageRead );
+        pInstanceData[ i ].instanceColor = (float4){ r, g, b, 1.f };
+        pInstanceData[ i ].instanceTransform = (float4x4)
+        {
+            (float4) { scl * sinf(_angle), scl *  cosf(_angle),  0.f,  0.f },
+            (float4) { scl * cosf(_angle), scl * -sinf(_angle),  0.f,  0.f },
+            (float4) {  0.f,  0.f, scl, 0.f },
+            (float4) { xoff, yoff, 0.f, 1.f }
+        };
+    }
+    pInstanceDataBuffer->didModifyRange( NS::Range::Make(0, pInstanceDataBuffer->length()) );
 
-    pEncoder->setVertexBuffer( pFrameDataBuffer, 0, 1 );
-    pEncoder->drawPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle, NS::UInteger(0), NS::UInteger(3) );
+    MTL::RenderPassDescriptor* pRpd = pView->currentRenderPassDescriptor();
+    MTL::RenderCommandEncoder* pEnc = pCmdBuff->renderCommandEncoder( pRpd );
 
-    pEncoder->endEncoding();
-    pCmdBuff->presentDrawable(pView->currentDrawable());
+    pEnc->setRenderPipelineState( _pRps );
+    pEnc->setVertexBuffer( _pVertexData, 0, 0);
+    pEnc->setVertexBuffer( pInstanceDataBuffer, 0, 1);
+
+    // void drawIndexedPrimitives( PrimitiveType primitiveType, NS::UInteger indexCount, IndexType indexType,
+    //                             const class Buffer* pIndexBuffer, NS::UInteger indexBufferOffset, 
+    //                             NS::UInteger instanceCount );
+    pEnc->drawIndexedPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle, 
+                                 6,
+                                 MTL::IndexType::IndexTypeUInt16,
+                                 _pIndexData,
+                                 0,
+                                 kNumInstances );
+
+    pEnc->endEncoding();
+    pCmdBuff->presentDrawable( pView->currentDrawable() );
     pCmdBuff->commit();
 
     pPool->release();
