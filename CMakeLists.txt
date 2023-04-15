@@ -12,6 +12,7 @@ src/main.cpp
 src/app_delegate.cpp
 src/view_delegate.cpp
 src/renderer.cpp
+src/math.cpp
 )
 
 target_include_directories(MyMetalApp PRIVATE dependencies/include/metal-cpp)

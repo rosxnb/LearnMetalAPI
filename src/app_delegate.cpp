@@ -67,13 +67,13 @@ void AppDelegate::applicationDidFinishLaunching( NS::Notification* pNotification
     _pViewDelegate = new ViewDelegate( _pDevice );
 
     CGRect frame = (CGRect){
-        {100.f, 100.f},
-        {800.f, 800.f}
+        {260.f, 180.f},
+        {1200.f, 750.f}
     };
 
     _pView = MTK::View::alloc()->init(frame, _pDevice);
     _pView->setColorPixelFormat(MTL::PixelFormat::PixelFormatBGRA8Unorm_sRGB);
-    _pView->setClearColor(MTL::ClearColor::Make(0.1, 0., 0.1, 1.0));
+    _pView->setClearColor(MTL::ClearColor::Make(0.01, 0.01, 0.01, 1.0));
     _pView->setDelegate( _pViewDelegate );
 
     _pWindow = NS::Window::alloc()->init(
