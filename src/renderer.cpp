@@ -1,4 +1,5 @@
 #include "renderer.hpp"
+#include "Foundation/NSRange.hpp"
 #include "Foundation/NSTypes.hpp"
 #include "Metal/MTLCommandEncoder.hpp"
 #include "utility.hpp"
@@ -9,12 +10,20 @@ Renderer::Renderer( MTL::Device* pDevice )
     : p_device( pDevice->retain() )
     , p_cmdQ( p_device->newCommandQueue() )
 { 
+    m_frame = 0;
+    m_angle = 0.f;
+    m_semaphore = dispatch_semaphore_create(Renderer::kMaxFramesInFlight);
+
     build_shaders();
     build_buffers();
+    build_frame_data();
 }
 
 Renderer::~Renderer()
 {
+    for (size_t i = 0; i < Renderer::kMaxFramesInFlight; ++i)
+        p_frameData[i]->release();
+
     p_argBuffer->release();
     p_shaderLibrary->release();
 
@@ -114,11 +123,29 @@ void Renderer::build_buffers()
     argEnc->release();
 }
 
+void Renderer::build_frame_data()
+{
+    for (size_t i = 0; i < Renderer::kMaxFramesInFlight; ++i)
+        p_frameData[i] = p_device->newBuffer( sizeof(FrameData), MTL::ResourceStorageModeManaged );
+}
+
 void Renderer::draw( MTK::View* pView )
 {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
 
+    m_frame = (m_frame + 1) % Renderer::kMaxFramesInFlight;
+    MTL::Buffer* pCurrentFrame = p_frameData[m_frame];
+
     MTL::CommandBuffer* pCmd = p_cmdQ->commandBuffer();
+
+    dispatch_semaphore_wait( m_semaphore, DISPATCH_TIME_FOREVER );
+    pCmd->addCompletedHandler( [this] (MTL::CommandBuffer* pCmd) {
+        dispatch_semaphore_signal( this->m_semaphore );
+    } );
+
+    reinterpret_cast<FrameData*>( pCurrentFrame->contents() )->angle = (m_angle += 0.01f);
+    pCurrentFrame->didModifyRange(NS::Range::Make(0, sizeof(FrameData)));
+
     MTL::RenderPassDescriptor* pRpd = pView->currentRenderPassDescriptor();
     MTL::RenderCommandEncoder* pEnc = pCmd->renderCommandEncoder(pRpd);
 
@@ -126,6 +153,8 @@ void Renderer::draw( MTK::View* pView )
     pEnc->setVertexBuffer( p_argBuffer, 0, 0 );
     pEnc->useResource( p_vertexPositions, MTL::ResourceUsageRead );
     pEnc->useResource( p_vertexColors, MTL::ResourceUsageRead );
+
+    pEnc->setVertexBuffer( pCurrentFrame, 0, 1 );
     pEnc->drawPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle, NS::UInteger(0), NS::UInteger(3) );
 
     pEnc->endEncoding();

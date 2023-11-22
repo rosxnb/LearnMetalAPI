@@ -13,12 +13,25 @@ struct VertexData
     device float3* colors [[id(1)]];
 };
 
+struct FrameData
+{
+    float angle;
+};
+
 vertex 
 V2F main_vertex( uint const vertexId [[ vertex_id ]],
-                 device const VertexData* vertexData [[ buffer(0) ]] )
+                 device const VertexData* vertexData [[ buffer(0) ]],
+                 constant FrameData* frameData [[ buffer(1) ]] )
 {
+    float a = frameData->angle;
+    float3x3 rotationMatrix = float3x3(
+        sin(a), cos(a), 0.f,
+        cos(a), -sin(a), 0.f,
+        0.f, 0.f, 1.f
+    );
+
     V2F output;
-    output.position = float4( vertexData->positions[vertexId], 1.f );
+    output.position = float4( rotationMatrix * vertexData->positions[vertexId], 1.f );
     output.color = half3( vertexData->colors[vertexId] );
     return output;
 }
