@@ -9,30 +9,26 @@ struct V2F
 
 struct VertexData
 {
-    device float3* positions [[id(0)]];
-    device float3* colors [[id(1)]];
+    float3 positions;
 };
 
-struct FrameData
+struct InstanceData
 {
-    float angle;
+    float4x4 instanceTransform;
+    float4 instanceColor;
 };
 
 vertex 
-V2F main_vertex( uint const vertexId [[ vertex_id ]],
-                 device const VertexData* vertexData [[ buffer(0) ]],
-                 constant FrameData* frameData [[ buffer(1) ]] )
+V2F main_vertex( device const VertexData* vertexData [[ buffer(0) ]],
+                 device const InstanceData* instanceData [[ buffer(1) ]],
+                 uint instanceID [[ instance_id ]],
+                 uint vertexId [[ vertex_id ]] )
 {
-    float a = frameData->angle;
-    float3x3 rotationMatrix = float3x3(
-        sin(a), cos(a), 0.f,
-        cos(a), -sin(a), 0.f,
-        0.f, 0.f, 1.f
-    );
+    float4 pos = float4( vertexData[vertexId].positions, 1.f );
 
     V2F output;
-    output.position = float4( rotationMatrix * vertexData->positions[vertexId], 1.f );
-    output.color = half3( vertexData->colors[vertexId] );
+    output.position = instanceData[instanceID].instanceTransform * pos;
+    output.color = half3( instanceData[instanceID].instanceColor.rgb );
     return output;
 }
 
