@@ -2,9 +2,9 @@
 #include <fstream>
 #include <sstream>
 
-std::string* Utility::read_source(const char* filepath)
+std::string Utility::read_source(const char* filepath)
 {
-    std::string* buffer = new std::string;
+    std::string buffer;
 
     std::ifstream fileHandler;
     fileHandler.exceptions( std::ifstream::badbit | std::ifstream::failbit );
@@ -14,7 +14,7 @@ std::string* Utility::read_source(const char* filepath)
         fileHandler.open(filepath);
         std::stringstream sstream;
         sstream << fileHandler.rdbuf();
-        buffer->assign( sstream.str() );
+        buffer = sstream.str();
     }
     catch (std::ifstream::failure err)
     {

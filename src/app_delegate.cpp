@@ -83,7 +83,7 @@ void AppDelegate::applicationDidFinishLaunching( NS::Notification* pNotification
             false );
 
     _pWindow->setContentView( _pView );
-    _pWindow->setTitle( NS::String::string("MyMetalAppDude!", NS::StringEncoding::UTF8StringEncoding) );
+    _pWindow->setTitle( NS::String::string("MetalApp", NS::StringEncoding::UTF8StringEncoding) );
     _pWindow->makeKeyAndOrderFront( nullptr );
 
     NS::Application* pApp = reinterpret_cast< NS::Application* >(pNotification->object());

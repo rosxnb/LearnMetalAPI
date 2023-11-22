@@ -7,7 +7,7 @@ set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_FLAGS "-Wall -fsanitize=address")
 
-add_executable(MyMetalApp
+add_executable(MetalApp
 src/main.cpp
 src/app_delegate.cpp
 src/view_delegate.cpp
@@ -15,9 +15,9 @@ src/renderer.cpp
 src/utility.cpp
 )
 
-target_include_directories(MyMetalApp PRIVATE dependencies/include/metal-cpp)
-target_include_directories(MyMetalApp PRIVATE dependencies/include/metal-cpp-extensions)
-target_link_libraries(MyMetalApp 
+target_include_directories(MetalApp PRIVATE dependencies/include/metal-cpp)
+target_include_directories(MetalApp PRIVATE dependencies/include/metal-cpp-extensions)
+target_link_libraries(MetalApp 
 "-framework Metal"
 "-framework Foundation"
 "-framework Cocoa"

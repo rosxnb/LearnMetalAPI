@@ -4,5 +4,5 @@
 
 struct Utility
 {
-    static std::string* read_source(const char* filepath);
+    static std::string read_source(const char* filepath);
 };

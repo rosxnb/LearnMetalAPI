@@ -14,5 +14,13 @@ class Renderer
     private:
         MTL::Device* p_device;
         MTL::CommandQueue* p_cmdQ;
-        std::string* p_shaderSrc;
+
+        MTL::RenderPipelineState* p_pipelineState;
+        MTL::Buffer* p_vertexPositions;
+        MTL::Buffer* p_vertexColors;
+
+        MTL::Buffer* p_argBuffer;
+        MTL::Library* p_shaderLibrary;
+
+        std::string m_shaderSrc;
 };
