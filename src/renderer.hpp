@@ -26,8 +26,12 @@ class Renderer
         float m_angle;
         dispatch_semaphore_t m_semaphore;
 
-        static constexpr int kMaxFramesInFlight = 3;
-        static constexpr int kNumInstances = 32;
+        static constexpr size_t kInstanceRows = 10;
+        static constexpr size_t kInstanceColumns = 10;
+        static constexpr size_t kInstanceDepth = 10;
+        static constexpr size_t kMaxFramesInFlight = kInstanceRows * kInstanceColumns * kInstanceDepth;
+        static constexpr size_t kNumInstances = 32;
+
         MTL::Buffer* p_indexBuffer;
         MTL::Buffer* p_instanceBuffer[kMaxFramesInFlight];
 
@@ -40,16 +44,24 @@ class Renderer
 namespace shader_types
 {
 
+struct VertexData
+{
+    simd::float4 position;
+    simd::float3 normal;
+};
+
 struct InstanceData
 {
     simd::float4x4 instanceTransform;
     simd::float4 instanceColor;
+    simd::float3x3 instanceNormalTransform;
 };
 
 struct CameraData
 {
     simd::float4x4 perspectiveTransform;
     simd::float4x4 worldTransform;
+    simd::float3x3 worldNormalTransform;
 };
 
 }

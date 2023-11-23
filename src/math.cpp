@@ -61,3 +61,7 @@ simd::float4x4 math::make_scale( const simd::float3& vec )
                        (float4){ 0, 0, 0, 1.0 });
 }
 
+simd::float3x3 math::discard_translation( const simd::float4x4& mat )
+{
+    return simd_matrix( mat.columns[0].xyz, mat.columns[1].xyz, mat.columns[2].xyz );
+}

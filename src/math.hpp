@@ -14,6 +14,7 @@ simd::float4x4 make_Y_rotate( float rad );
 simd::float4x4 make_Z_rotate( float rad );
 simd::float4x4 make_translate( const simd::float3& vec );
 simd::float4x4 make_scale( const simd::float3& vec );
+simd::float3x3 discard_translation( const simd::float4x4& mat );
 
 }
 

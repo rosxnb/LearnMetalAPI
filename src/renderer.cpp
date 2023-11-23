@@ -78,36 +78,46 @@ void Renderer::build_buffers()
 {
     constexpr float s = 0.5f;
 
-    constexpr simd::float3 verts[] = {
-        { -s, -s, +s },
-        { +s, -s, +s },
-        { +s, +s, +s },
-        { -s, +s, +s },
+    constexpr shader_types::VertexData verts[] = {
+        //   Positions          Normals
+        { { -s, -s, +s }, { 0.f,  0.f,  1.f } },
+        { { +s, -s, +s }, { 0.f,  0.f,  1.f } },
+        { { +s, +s, +s }, { 0.f,  0.f,  1.f } },
+        { { -s, +s, +s }, { 0.f,  0.f,  1.f } },
 
-        { -s, -s, -s },
-        { -s, +s, -s },
-        { +s, +s, -s },
-        { +s, -s, -s }
+        { { +s, -s, +s }, { 1.f,  0.f,  0.f } },
+        { { +s, -s, -s }, { 1.f,  0.f,  0.f } },
+        { { +s, +s, -s }, { 1.f,  0.f,  0.f } },
+        { { +s, +s, +s }, { 1.f,  0.f,  0.f } },
+
+        { { +s, -s, -s }, { 0.f,  0.f, -1.f } },
+        { { -s, -s, -s }, { 0.f,  0.f, -1.f } },
+        { { -s, +s, -s }, { 0.f,  0.f, -1.f } },
+        { { +s, +s, -s }, { 0.f,  0.f, -1.f } },
+
+        { { -s, -s, -s }, { -1.f, 0.f,  0.f } },
+        { { -s, -s, +s }, { -1.f, 0.f,  0.f } },
+        { { -s, +s, +s }, { -1.f, 0.f,  0.f } },
+        { { -s, +s, -s }, { -1.f, 0.f,  0.f } },
+
+        { { -s, +s, +s }, { 0.f,  1.f,  0.f } },
+        { { +s, +s, +s }, { 0.f,  1.f,  0.f } },
+        { { +s, +s, -s }, { 0.f,  1.f,  0.f } },
+        { { -s, +s, -s }, { 0.f,  1.f,  0.f } },
+
+        { { -s, -s, -s }, { 0.f, -1.f,  0.f } },
+        { { +s, -s, -s }, { 0.f, -1.f,  0.f } },
+        { { +s, -s, +s }, { 0.f, -1.f,  0.f } },
+        { { -s, -s, +s }, { 0.f, -1.f,  0.f } },
     };
 
     constexpr uint16_t indices[] = {
-        0, 1, 2, /* front */
-        2, 3, 0,
-
-        1, 7, 6, /* right */
-        6, 2, 1,
-
-        7, 4, 5, /* back */
-        5, 6, 7,
-
-        4, 0, 3, /* left */
-        3, 5, 4,
-
-        3, 2, 6, /* top */
-        6, 5, 3,
-
-        4, 7, 1, /* bottom */
-        1, 0, 4
+         0,  1,  2,  2,  3,  0, /* front */
+         4,  5,  6,  6,  7,  4, /* right */
+         8,  9, 10, 10, 11,  8, /* back */
+        12, 13, 14, 14, 15, 12, /* left */
+        16, 17, 18, 18, 19, 16, /* top */
+        20, 21, 22, 22, 23, 20, /* bottom */
     };
 
     constexpr size_t vertexDataSize = sizeof( verts );
@@ -124,8 +134,8 @@ void Renderer::build_buffers()
 
     for (size_t i = 0; i < Renderer::kMaxFramesInFlight; ++i)
     {
-        p_instanceBuffer[i] = p_device->newBuffer( kNumInstances * sizeof(shader_types::InstanceData), MTL::ResourceStorageModeManaged );
-        p_cameraBuffer[i] = p_device->newBuffer( sizeof(shader_types::CameraData), MTL::ResourceStorageModeManaged );
+        p_instanceBuffer[i] = p_device->newBuffer( kMaxFramesInFlight * kNumInstances * sizeof(shader_types::InstanceData), MTL::ResourceStorageModeManaged );
+        p_cameraBuffer[i] = p_device->newBuffer( kMaxFramesInFlight * sizeof(shader_types::CameraData), MTL::ResourceStorageModeManaged );
     }
 }
 
@@ -155,42 +165,63 @@ void Renderer::draw( MTK::View* pView )
         dispatch_semaphore_signal( this->m_semaphore );
     } );
 
-    m_angle += 0.003f;
-    constexpr float scl = 0.1f;
+    m_angle += 0.002f;
+    constexpr float scl = 0.2f;
 
     auto pInstanceData = reinterpret_cast<shader_types::InstanceData *>(pCurrentFrame->contents());
 
-    simd::float3 objectPosition = { 0.f, 0.f, -5.f };
+    simd::float3 objectPosition = { 0.f, 0.f, -10.f };
     simd::float4x4 rt           = math::make_translate(objectPosition);
-    simd::float4x4 rr           = math::make_Y_rotate(-m_angle);
+    simd::float4x4 rr1          = math::make_Y_rotate(-m_angle);
+    simd::float4x4 rr2          = math::make_X_rotate(m_angle * 0.5f);
     simd::float4x4 rtInv        = math::make_translate( {-objectPosition.x, -objectPosition.y, -objectPosition.z} );
-    simd::float4x4 fullRotation = rt * rr * rtInv;
+    simd::float4x4 fullRotation = rt * rr1 * rr2 * rtInv;
 
+    size_t ix = 0;
+    size_t iy = 0;
+    size_t iz = 0;
     for (size_t i = 0; i < Renderer::kNumInstances; ++i)
     {
-        float iDivNumInstances = i / (float)kNumInstances;
-        float xoff = (iDivNumInstances * 2.0f - 1.0f) + (1.f/kNumInstances);
-        float yoff = sin( ( iDivNumInstances + m_angle ) * 2.0f * M_PI);
+        if ( ix == kInstanceRows )
+        {
+            ix = 0;
+            iy += 1;
+        }
+
+        if ( iy == kInstanceRows )
+        {
+            iy = 0;
+            iz += 1;
+        }
 
         simd::float4x4 scale = math::make_scale( (simd::float3){ scl, scl, scl } );
-        simd::float4x4 zrot = math::make_Z_rotate( m_angle );
-        simd::float4x4 yrot = math::make_Y_rotate( m_angle );
-        simd::float4x4 translate = math::make_translate( math::add( objectPosition, { xoff, yoff, 0.f } ) );
+        simd::float4x4 zrot = math::make_Z_rotate( m_angle * sinf((float) ix));
+        simd::float4x4 yrot = math::make_Y_rotate( m_angle * cosf((float) iy));
+
+        float x = ((float)ix - (float)kInstanceRows/2.f) * (2.f * scl) + scl;
+        float y = ((float)iy - (float)kInstanceColumns/2.f) * (2.f * scl) + scl;
+        float z = ((float)iz - (float)kInstanceDepth/2.f) * (2.f * scl);
+        float4x4 translate = math::make_translate( math::add( objectPosition, { x, y, z } ) );
 
         pInstanceData[ i ].instanceTransform = fullRotation * translate * yrot * zrot * scale;
+        pInstanceData[ i ].instanceNormalTransform = math::discard_translation( pInstanceData[ i ].instanceTransform );
 
+        float iDivNumInstances = i / (float)kNumInstances;
         float r = iDivNumInstances;
         float g = 1.0f - r;
         float b = sinf( M_PI * 2.0f * iDivNumInstances );
         pInstanceData[ i ].instanceColor = (float4){ r, g, b, 1.0f };
+
+        ix++;
     }
     pCurrentFrame->didModifyRange(NS::Range::Make(0, pCurrentFrame->length()));
 
     MTL::Buffer* pCurrentCamera = p_cameraBuffer[ m_frame ];
     auto pCameraData = reinterpret_cast<shader_types::CameraData*>( pCurrentCamera->contents() );
-    pCameraData->perspectiveTransform = math::make_perspective( 45.f * M_PI / 180.f, 1.f, 0.03f, 500.f );
+    pCameraData->perspectiveTransform = math::make_perspective( 45.f * M_PI / 180.f, 1.f, 0.01f, 500.f );
     pCameraData->worldTransform = math::make_identity();
-    pCurrentCamera->didModifyRange(NS::Range::Make(0, pCurrentCamera->length()));
+    pCameraData->worldNormalTransform = math::discard_translation(pCameraData->worldTransform);
+    pCurrentCamera->didModifyRange(NS::Range::Make(0, sizeof(shader_types::CameraData)));
 
 
     MTL::RenderPassDescriptor* pRpd = pView->currentRenderPassDescriptor();
@@ -207,7 +238,7 @@ void Renderer::draw( MTK::View* pView )
     pEnc->setFrontFacingWinding( MTL::Winding::WindingCounterClockwise );
 
     pEnc->drawIndexedPrimitives( MTL::PrimitiveType::PrimitiveTypeTriangle,
-                                 6, MTL::IndexType::IndexTypeUInt16,
+                                 6 * 6, MTL::IndexType::IndexTypeUInt16,
                                  p_indexBuffer,
                                  0,
                                  kNumInstances );
