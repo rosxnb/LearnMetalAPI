@@ -11,7 +11,7 @@ class Renderer
         void draw( MTK::View* pView );
         void build_shaders();
         void build_buffers();
-        void build_instance_data();
+        void build_depth_stencil_states();
 
     private:
         MTL::Device* p_device;
@@ -31,6 +31,9 @@ class Renderer
         MTL::Buffer* p_indexBuffer;
         MTL::Buffer* p_instanceBuffer[kMaxFramesInFlight];
 
+        MTL::DepthStencilState* p_depthStencilState;
+        MTL::Buffer* p_cameraBuffer[kMaxFramesInFlight];
+
         std::string m_shaderSrc;
 };
 
@@ -41,6 +44,12 @@ struct InstanceData
 {
     simd::float4x4 instanceTransform;
     simd::float4 instanceColor;
+};
+
+struct CameraData
+{
+    simd::float4x4 perspectiveTransform;
+    simd::float4x4 worldTransform;
 };
 
 }

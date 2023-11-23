@@ -12,6 +12,7 @@ src/main.cpp
 src/app_delegate.cpp
 src/view_delegate.cpp
 src/renderer.cpp
+src/math.cpp
 src/utility.cpp
 )
 
