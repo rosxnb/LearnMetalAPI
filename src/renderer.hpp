@@ -10,6 +10,7 @@ class Renderer
         void draw( MTK::View* pView );
         void build_shaders();
         void build_buffers();
+        void build_textures();
 
     private:
         MTL::Device* p_device;
@@ -22,5 +23,12 @@ class Renderer
         MTL::Buffer* p_argBuffer;
         MTL::Library* p_shaderLibrary;
 
+        MTL::Texture* p_texture;
+        MTL::Buffer* p_texCoords;
+
         std::string m_shaderSrc;
+        const char* m_texPath = "/Users/rosxnb/Programs/MetalAPI/resources/tex.png";
+        int m_imgWidth, m_imgHeight, m_imgChannels;
+        unsigned char* m_imgData = nullptr;
 };
+
