@@ -12,6 +12,16 @@ simd::float4x4 math::make_perspective( float fovRad, float aspect, float znear, 
                                  (float4){ 0, 0, -1, 0 });
 }
 
+simd::float4x4 math::make_orthographic(float left, float right, float bottom, float top, float near, float far)
+{
+    using simd::float4;
+    return simd_matrix_from_rows(
+        (float4){ 2.f/(right - left),                  0.f,                0.f,   -(right + left)/(right - left) },
+        (float4){                0.f,   2.f/(top - bottom),                0.f,   -(top + bottom)/(top - bottom) },
+        (float4){                0.f,                  0.f,  -2.f/(far - near),   -(far + near)/(far - near) },
+        (float4){                0.f,                  0.f,                0.f,               1.f                });
+}
+
 simd::float4x4 math::make_X_rotate( float rad )
 {
     using simd::float4;

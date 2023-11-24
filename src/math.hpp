@@ -9,6 +9,7 @@ namespace math
 constexpr simd::float3 add( const simd::float3& a, const simd::float3& b );
 constexpr simd_float4x4 make_identity();
 simd::float4x4 make_perspective( float fovRad, float aspect, float znear, float zfar );
+simd::float4x4 make_orthographic( float left, float right, float bottom, float top, float near, float far );
 simd::float4x4 make_X_rotate( float rad );
 simd::float4x4 make_Y_rotate( float rad );
 simd::float4x4 make_Z_rotate( float rad );
