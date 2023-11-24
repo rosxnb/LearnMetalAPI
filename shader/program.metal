@@ -17,10 +17,11 @@ struct VertexData
 
 vertex 
 V2F main_vertex( uint const vertexId [[ vertex_id ]],
-                 device const VertexData* vertexData [[ buffer(0) ]] )
+                 device const VertexData* vertexData [[ buffer(0) ]],
+                 device const float4x4& proj [[ buffer(1) ]] )
 {
     V2F output;
-    output.position = float4( vertexData->positions[vertexId], 1.f );
+    output.position = proj * float4( vertexData->positions[vertexId], 1.f );
     output.color = half3( vertexData->colors[vertexId] );
     output.texcord = vertexData->texcords[vertexId].xy;
     return output;

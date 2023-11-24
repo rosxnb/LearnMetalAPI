@@ -27,8 +27,10 @@ class Renderer
         MTL::Buffer* p_texCoords;
 
         std::string m_shaderSrc;
-        const char* m_texPath = "/Users/rosxnb/Programs/MetalAPI/resources/tex.png";
+        const char* m_texPath = "resources/large-png.png";
         int m_imgWidth, m_imgHeight, m_imgChannels;
         unsigned char* m_imgData = nullptr;
+
+        MTL::Buffer* p_proj;
 };
 

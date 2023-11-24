@@ -2,7 +2,9 @@
 #include "Foundation/NSTypes.hpp"
 #include "Metal/MTLCommandEncoder.hpp"
 #include "Metal/MTLResource.hpp"
+#include "math.hpp"
 #include "utility.hpp"
+#include <simd/matrix_types.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_img.hpp"
@@ -78,12 +80,18 @@ void Renderer::build_buffers()
 
     simd::float3 positions[NumVertices] =
     {
-        { -0.8f,  0.8f, 0.0f }, // left top
-        { +0.8f,  0.8f, 0.0f }, // right top
-        { +0.8f, -0.8f, 0.0f }, // right down
-        { +0.8f, -0.8f, 0.0f }, // right down
-        { -0.8f, -0.8f, 0.0f }, // left down
-        { -0.8f,  0.8f, 0.0f }, // left top
+        // { -0.8f,  0.8f, 0.0f }, // left top
+        // { +0.8f,  0.8f, 0.0f }, // right top
+        // { +0.8f, -0.8f, 0.0f }, // right down
+        // { +0.8f, -0.8f, 0.0f }, // right down
+        // { -0.8f, -0.8f, 0.0f }, // left down
+        // { -0.8f,  0.8f, 0.0f }, // left top
+        { 200.f, 700.f, 0.f }, // left top
+        { 800.f, 700.f, 0.f }, // right top
+        { 800.f, 100.f, 0.f }, // right down
+        { 800.f, 100.f, 0.f }, // right down
+        { 200.f, 100.f, 0.f }, // left down
+        { 200.f, 700.f, 0.f }, // left top
     };
 
     simd::float3 colors[NumVertices] =
@@ -125,6 +133,22 @@ void Renderer::build_buffers()
     p_vertexColors->didModifyRange( NS::Range::Make( 0, p_vertexColors->length() ) );
     p_texCoords->didModifyRange( NS::Range::Make( 0, p_texCoords->length() ) );
 
+
+    // prepare ortho matrix
+    simd::float4x4 ortho = math::make_orthographic(0.f, 1200.f, 0.f, 750.f, -1.f, 1.f);
+    p_proj = p_device->newBuffer( sizeof(simd::float4x4), MTL::ResourceStorageModeManaged );
+    memcpy( p_proj->contents(), &ortho, sizeof(simd::float4x4) );
+    p_proj->didModifyRange( NS::Range::Make( 0, p_proj->length() ) );
+
+    // copy p_proj to inspect from lldb
+    // float temp[4][4];
+    // memcpy( temp, &ortho, sizeof(simd::float4x4) );
+
+    // test out the proj * vector result
+    // simd::float4 vec{200.f, 700.f, 0.f, 1.f};
+    // vec = ortho * vec;
+
+
     // argument buffer encoding
     using NS::StringEncoding::UTF8StringEncoding;
     MTL::Function* fnVertex = p_shaderLibrary->newFunction( NS::String::string("main_vertex", UTF8StringEncoding) );
@@ -146,6 +170,8 @@ void Renderer::build_buffers()
 void Renderer::build_textures()
 {
     // stbi_set_flip_vertically_on_load(true);
+
+    // image file needs to be PNG format
     m_imgData = stbi_load(m_texPath, &m_imgWidth, &m_imgHeight, &m_imgChannels, STBI_rgb_alpha);
 
     if (!m_imgData)
@@ -175,6 +201,7 @@ void Renderer::draw( MTK::View* pView )
 {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
 
+
     MTL::CommandBuffer* pCmd = p_cmdQ->commandBuffer();
     MTL::RenderPassDescriptor* pRpd = pView->currentRenderPassDescriptor();
     MTL::RenderCommandEncoder* pEnc = pCmd->renderCommandEncoder(pRpd);
@@ -184,6 +211,7 @@ void Renderer::draw( MTK::View* pView )
     pEnc->useResource( p_vertexPositions, MTL::ResourceUsageRead );
     pEnc->useResource( p_vertexColors, MTL::ResourceUsageRead );
     pEnc->useResource( p_texCoords, MTL::ResourceUsageRead );
+    pEnc->setVertexBuffer( p_proj, 0, 1 );
 
     pEnc->setFragmentTexture( p_texture, 0 );
 
